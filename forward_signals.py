@@ -68,6 +68,18 @@ def compute_row(data):
              for s, d in data.items() if s != "NIFTY"}
     row["breadth"] = round(float(np.mean(list(above.values()))), 3)
 
+    # market volume z: mean of per-stock log-volume z-scores (60d) —
+    # tracks the unvalidated "green + high market volume" overnight variant
+    mvz = []
+    for s, d in data.items():
+        if s == "NIFTY":
+            continue
+        logv = np.log(d["volume"].replace(0, np.nan))
+        z = (logv - logv.rolling(60).mean()) / logv.rolling(60).std()
+        if np.isfinite(z.iloc[-1]):
+            mvz.append(float(z.iloc[-1]))
+    row["mktvol_z"] = round(float(np.mean(mvz)), 3) if mvz else np.nan
+
     comp = {}
     for s, d in data.items():
         if s == "NIFTY":
