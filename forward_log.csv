@@ -1,0 +1,2 @@
+run_ts,bar_date,nifty_open,overnight_ret_pct,day_ret_pct,nifty_close,rvol20,voltgt15_w,above_ma200,breadth,quiet7,positioning_date,retail_ratio,fii_ratio,retail_pctile_1y,cs_setup,cs_trigger,cs_stop,bajfin_close
+2026-07-07T21:32:09,2026-07-07,24464.45,0.1396,-0.2688,24398.7,0.1077,1.0,False,0.486,ITC|ULTRACEMCO|RELIANCE|HINDUNILVR|SUNPHARMA|ASIANPAINT|POWERGRID,2026-07-07,0.7808,0.1075,0.964,False,,,1042.5

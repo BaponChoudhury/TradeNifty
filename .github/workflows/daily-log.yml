@@ -1,0 +1,27 @@
+name: daily-signal-log
+on:
+  schedule:
+    - cron: '45 13 * * 1-5'   # 13:45 UTC = 19:15 IST, Mon-Fri (after NSE publishes participant OI)
+  workflow_dispatch: {}        # manual run button
+permissions:
+  contents: write
+jobs:
+  log:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+      - name: install deps
+        run: pip install pandas numpy "git+https://github.com/rongardF/tvdatafeed"
+      - name: run signal logger
+        run: python forward_signals.py
+      - name: commit log
+        run: |
+          git config user.name "signal-bot"
+          git config user.email "signal-bot@users.noreply.github.com"
+          git add forward_log.csv fii_positioning.csv
+          git commit -m "signal log $(date -u +%F)" || echo "nothing new to log"
+          git push
