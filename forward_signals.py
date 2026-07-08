@@ -179,6 +179,12 @@ if __name__ == "__main__":
         print("fetch too incomplete; aborting without logging", file=sys.stderr)
         sys.exit(1)
     row = compute_row(data)
+    # never log a partial session: if the latest bar is today's and NSE is
+    # still open (before 15:35 IST), skip — tonight's scheduled run logs it
+    now_ist = pd.Timestamp.now(tz="Asia/Kolkata")
+    if str(row["bar_date"]) == str(now_ist.date()) and (now_ist.hour, now_ist.minute) < (15, 35):
+        print(f"market still open ({now_ist:%H:%M} IST) — skipping partial-day log")
+        sys.exit(0)
     if os.path.exists(LOG):
         log = pd.read_csv(LOG)
         if str(row["bar_date"]) in set(log["bar_date"].astype(str)):
