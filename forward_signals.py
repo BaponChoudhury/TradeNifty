@@ -32,7 +32,7 @@ def fetch_all():
     from tvDatafeed import TvDatafeed, Interval
     tv = TvDatafeed()
     out = {}
-    for sym in LARGECAPS + ["NIFTY", "BANKNIFTY"]:
+    for sym in LARGECAPS + ["NIFTY", "BANKNIFTY", "NIFTY1!"]:
         for attempt in range(3):
             try:
                 df = tv.get_hist(sym, "NSE", Interval.in_daily, n_bars=300)
@@ -64,6 +64,13 @@ def compute_row(data):
         "voltgt15_w": round(min(1.0, 0.15 / rvol), 3),
         "above_ma200": bool(nifty.iloc[-1] > nifty.rolling(200).mean().iloc[-1]),
     }
+    # NIFTY futures (continuous) — actual tradeable prices for P&L verdicts
+    if "NIFTY1!" in data:
+        fc, fo = data["NIFTY1!"]["close"], data["NIFTY1!"]["open"]
+        row["fut_close"] = float(fc.iloc[-1])
+        row["fut_overnight_ret_pct"] = round(float(fo.iloc[-1] / fc.iloc[-2] - 1) * 100, 4)
+        row["fut_day_ret_pct"] = round(float(fc.iloc[-1] / fo.iloc[-1] - 1) * 100, 4)
+
     if "BANKNIFTY" in data:
         bc, bo = data["BANKNIFTY"]["close"], data["BANKNIFTY"]["open"]
         row["bnf_close"] = float(bc.iloc[-1])
@@ -215,9 +222,12 @@ if __name__ == "__main__":
         row["result"] = ""
         row["cum_pnl_1lot_rs"] = prev_cum
     elif held:
-        gross = float(row["overnight_ret_pct"])       # last night's actual gap %
+        # prefer actual futures prices for the P&L verdict; index as fallback
+        fut_gap = row.get("fut_overnight_ret_pct")
+        gross = float(fut_gap) if fut_gap is not None and pd.notna(fut_gap) else float(row["overnight_ret_pct"])
         net = gross - COST_PCT
-        notional = LOT * float(prev["nifty_close"])   # entry ~ last close
+        base_px = prev["fut_close"] if "fut_close" in log.columns and pd.notna(prev.get("fut_close")) else prev["nifty_close"]
+        notional = LOT * float(base_px)               # entry ~ last futures close
         pnl = round(net / 100 * notional)
         row["held_last_night"] = True
         row["net_overnight_pct"] = round(net, 4)
