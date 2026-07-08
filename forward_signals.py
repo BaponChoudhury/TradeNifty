@@ -185,14 +185,45 @@ if __name__ == "__main__":
     if str(row["bar_date"]) == str(now_ist.date()) and (now_ist.hour, now_ist.minute) < (15, 35):
         print(f"market still open ({now_ist:%H:%M} IST) — skipping partial-day log")
         sys.exit(0)
-    if os.path.exists(LOG):
-        log = pd.read_csv(LOG)
-        if str(row["bar_date"]) in set(log["bar_date"].astype(str)):
-            print(f"already logged for {row['bar_date']}")
-            sys.exit(0)
-        log = pd.concat([log, pd.DataFrame([row])], ignore_index=True)
+    log = pd.read_csv(LOG) if os.path.exists(LOG) else None
+    if log is not None and str(row["bar_date"]) in set(log["bar_date"].astype(str)):
+        print(f"already logged for {row['bar_date']}")
+        sys.exit(0)
+
+    # ---- verdict columns: did last night's decision work? ----
+    COST_PCT = 0.035          # futures round trip, % of notional
+    LOT = 75
+    row["signal_tonight"] = "HOLD" if row["day_ret_pct"] > 0 else "SKIP"
+    prev_cum = 0.0
+    held = None
+    if log is not None and len(log):
+        prev = log.iloc[-1]
+        if "cum_pnl_1lot_rs" in log.columns and pd.notna(prev.get("cum_pnl_1lot_rs")):
+            prev_cum = float(prev["cum_pnl_1lot_rs"])
+        try:
+            held = float(prev["day_ret_pct"]) > 0    # last night's decision
+        except (ValueError, TypeError):
+            held = None
+    if held is None:
+        row["result"] = ""
+        row["cum_pnl_1lot_rs"] = prev_cum
+    elif held:
+        gross = float(row["overnight_ret_pct"])       # last night's actual gap %
+        net = gross - COST_PCT
+        notional = LOT * float(prev["nifty_close"])   # entry ~ last close
+        pnl = round(net / 100 * notional)
+        row["held_last_night"] = True
+        row["net_overnight_pct"] = round(net, 4)
+        row["result"] = "WIN" if net > 0 else "LOSS"
+        row["pnl_1lot_rs"] = pnl
+        row["cum_pnl_1lot_rs"] = round(prev_cum + pnl)
     else:
-        log = pd.DataFrame([row])
+        row["held_last_night"] = False
+        row["result"] = f"SKIPPED (gap was {row['overnight_ret_pct']:+.2f}%)"
+        row["pnl_1lot_rs"] = 0
+        row["cum_pnl_1lot_rs"] = round(prev_cum)
+
+    log = pd.concat([log, pd.DataFrame([row])], ignore_index=True) if log is not None else pd.DataFrame([row])
     log.to_csv(LOG, index=False)
     print(f"logged {row['bar_date']}: nifty={row['nifty_close']:.1f} w={row['voltgt15_w']} "
           f"breadth={row['breadth']} cs_setup={row['cs_setup']}")
