@@ -32,7 +32,7 @@ def fetch_all():
     from tvDatafeed import TvDatafeed, Interval
     tv = TvDatafeed()
     out = {}
-    for sym in LARGECAPS + ["NIFTY"]:
+    for sym in LARGECAPS + ["NIFTY", "BANKNIFTY"]:
         for attempt in range(3):
             try:
                 df = tv.get_hist(sym, "NSE", Interval.in_daily, n_bars=300)
@@ -64,8 +64,15 @@ def compute_row(data):
         "voltgt15_w": round(min(1.0, 0.15 / rvol), 3),
         "above_ma200": bool(nifty.iloc[-1] > nifty.rolling(200).mean().iloc[-1]),
     }
+    if "BANKNIFTY" in data:
+        bc, bo = data["BANKNIFTY"]["close"], data["BANKNIFTY"]["open"]
+        row["bnf_close"] = float(bc.iloc[-1])
+        row["bnf_overnight_ret_pct"] = round(float(bo.iloc[-1] / bc.iloc[-2] - 1) * 100, 4)
+        row["bnf_day_ret_pct"] = round(float(bc.iloc[-1] / bo.iloc[-1] - 1) * 100, 4)
+        row["bnf_signal_tonight"] = "HOLD" if row["bnf_day_ret_pct"] > 0 else "SKIP"
+
     above = {s: float(d["close"].iloc[-1] > d["close"].rolling(100).mean().iloc[-1])
-             for s, d in data.items() if s != "NIFTY"}
+             for s, d in data.items() if s not in ("NIFTY", "BANKNIFTY")}
     row["breadth"] = round(float(np.mean(list(above.values()))), 3)
 
     # market volume z: mean of per-stock log-volume z-scores (60d) —
