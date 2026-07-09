@@ -160,6 +160,22 @@ def compute_row(data):
         print(f"warn: positioning fetch failed ({e})", file=sys.stderr)
         row["retail_ratio"] = row["fii_ratio"] = row["retail_pctile_1y"] = np.nan
 
+    # Engine 2 (stock overnight, Rule B): NIFTY green + stock green + vol z>1
+    picks = []
+    if row["day_ret_pct"] > 0:
+        for s, d2 in data.items():
+            if s in ("NIFTY", "BANKNIFTY", "NIFTY1!"):
+                continue
+            if d2["close"].iloc[-1] <= d2["open"].iloc[-1]:
+                continue
+            logv2 = np.log(d2["volume"].replace(0, np.nan))
+            z2 = (logv2 - logv2.rolling(60).mean()) / logv2.rolling(60).std()
+            if np.isfinite(z2.iloc[-1]) and z2.iloc[-1] > 1:
+                picks.append((s, float(z2.iloc[-1]), float(d2["close"].iloc[-1])))
+        picks.sort(key=lambda x: -x[1])
+    row["engine2_picks"] = "|".join(f"{s}@{c:.2f}" for s, _, c in picks[:5])
+    row["engine2_signal"] = "HOLD" if picks else "SKIP"
+
     d = data["BAJFINANCE"]
     c, h, l = d["close"], d["high"], d["low"]
     rng = (h - l).replace(0, np.nan)
@@ -234,6 +250,22 @@ if __name__ == "__main__":
             held = float(prev["day_ret_pct"]) > 0    # last night's decision
         except (ValueError, TypeError):
             held = None
+    # engine-2 verdict: score last night's stock picks against today's opens
+    if log is not None and len(log):
+        prev_picks = str(log.iloc[-1].get("engine2_picks", "") or "")
+        if prev_picks and prev_picks != "nan":
+            rets2 = []
+            for item in prev_picks.split("|"):
+                try:
+                    s2, px2 = item.split("@")
+                    if s2 in data:
+                        rets2.append(float(data[s2]["open"].iloc[-1]) / float(px2) - 1)
+                except ValueError:
+                    pass
+            if rets2:
+                row["engine2_last_night_pct"] = round((np.mean(rets2) - 0.0012) * 100, 4)
+                row["engine2_result"] = "WIN" if row["engine2_last_night_pct"] > 0 else "LOSS"
+
     if held is None:
         row["result"] = ""
         row["cum_pnl_1lot_rs"] = prev_cum
