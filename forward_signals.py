@@ -102,6 +102,22 @@ def compute_row(data):
         comp[s] = float(rp.rolling(10).mean().iloc[-1] / rp.rolling(60).mean().iloc[-1])
     row["quiet7"] = "|".join(sorted(comp, key=comp.get)[:7])
 
+    # last COMPLETED S&P 500 session (known at IST evening; US-red nights
+    # showed ~2x per-night edge — tracked as variant, not yet the core rule)
+    try:
+        from tvDatafeed import TvDatafeed, Interval
+        spx = TvDatafeed().get_hist("SPX", "SP", Interval.in_daily, n_bars=10)
+        spx.index = pd.to_datetime(spx.index).normalize()
+        now_ny = pd.Timestamp.now(tz="America/New_York")
+        done = spx[spx.index.date < now_ny.date()] if now_ny.hour < 16 else spx
+        r = done["close"].iloc[-1] / done["close"].iloc[-2] - 1
+        row["spx_last_ret_pct"] = round(float(r) * 100, 3)
+        row["signal_tonight_usfilter"] = ("HOLD" if row["day_ret_pct"] > 0 and r < 0 else "SKIP")
+    except Exception as e:
+        print(f"warn: SPX fetch failed ({e})", file=sys.stderr)
+        row["spx_last_ret_pct"] = np.nan
+        row["signal_tonight_usfilter"] = ""
+
     # institutional/retail F&O positioning (NSE participant-wise OI)
     try:
         import io
